@@ -1,0 +1,5 @@
+flask-mail
+flask
+flask-sqlalchemy
+mysqlclient
+python-dotenv
