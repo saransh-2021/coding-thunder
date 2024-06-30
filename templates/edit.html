@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+{% block body %}
+
+<!-- Page Header-->
+<header class="masthead" style="background-image: url('{{ url_for('static', filename='asset/img/admin-bg.webp')}}')">
+    <div class="container position-relative px-4 px-lg-5">
+        <div class="row gx-4 gx-lg-5 justify-content-center">
+            <div class="col-md-10 col-lg-8 col-xl-7">
+                <div class="site-heading">
+                    <h1>Admin Panel</h1>
+                    <span class="subheading">Manage your posts and change them</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Main Content-->
+<div class="container px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+        <div class="col-md-10 col-lg-8 col-xl-7 ">
+            <h1>{{'Edit Post' if post.sno else 'Add New Post'}}</h1>
+            <div class="my-5">
+                <form id="contactForm" action="/edit/{{ post.sno if post.sno else '0' }}" method="post">
+                    <div class="form-floating mb-3">
+                        <input class="form-control" id="title" name="title" type="text" placeholder="Enter Post's Title..." data-sb-validations="required" value="{{ post.title if post.sno else '' }}">
+                        <label for="title">Title</label>
+                        <div class="invalid-feedback" data-sb-feedback="title:required">A title is required.</div>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input class="form-control" id="sub_heading" name="sub_heading" type="text" placeholder="Enter Post's Tagline..." data-sb-validations="required" value="{{ post.sub_heading if post.sno else '' }}">
+                        <label for="sub_heading">Tagline</label>
+                        <div class="invalid-feedback" data-sb-feedback="sub_heading:required">A tagline is required.</div>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input class="form-control" id="slug" name="slug" type="text" placeholder="Enter your Post's Slug..." data-sb-validations="required" value="{{ post.slug if post.sno else '' }}">
+                        <label for="slug">Post's Slug</label>
+                        <div class="invalid-feedback" data-sb-feedback="slug:required">A post slug is required.</div>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <input class="form-control" id="img_file" name="img_file" type="url" placeholder="https://example.com/image.jpg" value="{{ post.img_file if post.sno else '' }}">
+                        <label for="img_file">Image URL / Link</label>
+                    </div>
+                    <div class="form-floating mb-3">
+                        <textarea class="form-control" id="content" name="content" placeholder="Enter your message here..." style="height: 12rem" data-sb-validations="required">{{ post.content if post.sno else '' }}</textarea>
+                        <label for="content">Content</label>
+                        <div class="invalid-feedback" data-sb-feedback="content:required">Post content is required.</div>
+                    </div>
+                    <!-- Submit Button -->
+                    <button class="btn btn-primary text-uppercase" id="submitButton" type="submit">Submit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
