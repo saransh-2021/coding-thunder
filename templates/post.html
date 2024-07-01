@@ -8,7 +8,7 @@
 {% set fname = 'asset/img/posts/'+ post.img_file +".webp"%}
 <header class="masthead" style="background-image: url('{{ url_for('static', filename=fname)}}')">
 {% else %}
-<header class="masthead" style="background-image: url('{{ url_for('static', filename='asset/img/post-bg.jpg')}}')">
+<header class="masthead" style="background-image: url('{{ url_for('static', filename='asset/img/post-bg.webp')}}')">
 {% endif %}
     <div class="container position-relative px-4 px-lg-5">
         <div class="row gx-4 gx-lg-5 justify-content-center">

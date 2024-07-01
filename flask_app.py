@@ -1,0 +1,280 @@
+from flask import Flask, render_template, request, session, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+from flask_mail import Mail
+from werkzeug.utils import secure_filename
+from sqlalchemy.orm import Mapped, mapped_column
+
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+# Get the directory of the current script
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(basedir, '.env'))
+
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "super_secret_key")
+
+app.config["UPLOAD_FOLDER"] = basedir
+
+# Parameters loaded from environment variables
+params = {
+    "local_server": os.getenv("LOCAL_SERVER", "True"),
+    "local_uri": os.getenv("LOCAL_URI", "mysql://root:saransh@localhost/codingthunder"),
+    "prod_uri": os.getenv("PROD_URI", "mysql+mysqldb://trying768:my-code-thun@trying768.mysql.pythonanywhere-services.com/trying768$codingthunder"),
+    "gmail-username": os.getenv("GMAIL_USERNAME", "wonderfulemail@gmail.com"),
+    "gmail-password": os.getenv("GMAIL_PASSWORD", "a-sUperSEcuR!TYp@SSw0rd"),
+    "mail-reply-to": os.getenv("MAIL_REPLY_TO", "otherwonderfullemail@gmail.com"),
+    "no_of_posts": int(os.getenv("NO_OF_POSTS", "3")),
+    "admin_user": os.getenv("ADMIN_USER", "saransh"),
+    "admin_password": os.getenv("ADMIN_PASSWORD", "slimshady")
+}
+
+# Site configuration loaded from environment variables
+site_config = {
+    "fb_url": os.getenv("FB_URL", "https://www.facebook.com/"),
+    "tw_url": os.getenv("TW_URL", "https://www.twitter.com/"),
+    "gthb_url": os.getenv("GTHB_URL", "https://www.github.com/"),
+    "blog_name": os.getenv("BLOG_NAME", "Coding Thunder"),
+    "tag_line": os.getenv("TAG_LINE", "Heaven for Programmers"),
+    "about_text": os.getenv("ABOUT_TEXT", "")
+}
+
+app.config.update(
+    MAIL_SERVER = os.getenv('MAIL_SERVER', 'smtp.gmail.com'),
+    MAIL_PORT = int(os.getenv('MAIL_PORT', 465)),
+    MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'True').lower() in ('true', '1', 't', 'yes'),
+    MAIL_USERNAME = params["gmail-username"],
+    MAIL_PASSWORD = params["gmail-password"],
+    MAIL_DEFAULT_SENDER = params["gmail-username"]
+)
+mail = Mail(app)
+
+if str(params['local_server']).lower() in ("true", "1", "yes"):
+    app.config["SQLALCHEMY_DATABASE_URI"] = params['local_uri']
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = params['prod_uri']
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle' : 280}
+
+db = SQLAlchemy(app)
+
+class Contacts(db.Model):
+    sno = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=False, nullable=False)
+    phone_num = db.Column(db.String(20), nullable=False)
+    msg = db.Column(db.String(500), nullable=False)
+    date = db.Column(db.String(12), nullable=True)
+    email = db.Column(db.String(120), nullable=False)
+
+    # def __init__(self, *, name: str, phone_num: str, msg: str, email: str, date: str | None = None) -> None:
+    #     super().__init__(name=name, phone_num=phone_num, msg=msg, email=email, date=date)
+
+class Posts(db.Model):
+    sno = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(80), unique=False, nullable=False)
+    slug = db.Column(db.String(50), nullable=False)
+    content = db.Column(db.String(500), nullable=False)
+    sub_heading = db.Column(db.String(120), nullable=False)
+    date = db.Column(db.String(12), nullable=True)
+    img_file = db.Column(db.String(500), nullable=True)
+
+    # def __init__(self, *, title: str, slug: str, content: str, sub_heading: str,
+    #              img_file: str | None = None, date: str | None = None) -> None:
+    #     super().__init__(title=title, slug=slug, content=content, sub_heading=sub_heading,
+    #                       img_file=img_file, date=date)
+
+@app.route('/')
+def home():
+    page = request.args.get('page', 1, type=int)
+
+    # Fetch posts for the current page using SQLAlchemy's .paginate() method
+    posts = Posts.query.order_by(Posts.sno.desc()).paginate(page = page, per_page=params["no_of_posts"], error_out=False)
+    return render_template('index.html', params=site_config, posts=posts)
+
+@app.route('/about')
+def about():
+    return render_template('about.html', params=site_config)
+
+@app.route("/hello")
+def hello():
+    return "hello, you have successfully test connected with the coding thunders website"
+
+@app.route('/contact', methods=['GET','POST'])
+def contact():
+    if request.method=='POST':
+        name = request.form['name']
+        email = request.form['email']
+        phone = request.form['phone']
+        message = request.form['message']
+
+        entry = Contacts(name=name, phone_num=phone, msg=message, email=email, date=datetime.now().strftime("%Y-%m-%d"))
+        db.session.add(entry)
+        db.session.commit()
+        try:
+            mail.send_message(subject=f"New Message from {name}",
+                              recipients=[email],
+                              body=f"Message: {message}\n\nPhone: {phone}"
+                              )
+        except Exception as e:
+            app.logger.warning(f"Mail sending failed: {e}")
+
+    return render_template('contact.html', params=site_config)
+
+@app.route('/post/<string:post_slug>', methods=["GET"])
+def post_route(post_slug):
+    post = Posts.query.filter_by(slug=post_slug).first()
+    return render_template('post.html', params=site_config, post=post)
+
+@app.route('/dashboard')
+def dashboard():
+    if "user" in session and session["user"] == params["admin_user"]:
+        posts = Posts.query.order_by(Posts.sno.desc()).all()
+        return render_template('dashboard.html', params=site_config, posts=posts)
+    else:
+        return redirect(url_for('login'))
+
+@app.route('/login', methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["uname"]
+        userpass = request.form["pass"]
+        if username == params["admin_user"] and userpass == params["admin_password"]:
+            session['user'] = username
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', params=site_config, message="Invalid credentials. Please try again.")
+    else:
+        return render_template('login.html', params=site_config)
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('home'))
+
+@app.route('/uploader', methods=["GET", "POST"])
+def uploader():
+    if "user" in session and session["user"] == params["admin_user"]:
+        if request.method=="POST":
+            f = request.files['file1']
+            if not f.filename:
+                return "No file selected"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
+            f.save(file_path)
+            os.remove(file_path)
+            return "Uploaded successfully"
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login"))
+
+@app.route('/edit/<string:sno>', methods=["GET","POST"])
+def edit_route(sno):
+    if "user" in session and session["user"] == params["admin_user"]:
+        if request.method == "POST":
+            title = request.form["title"]
+            sub_heading = request.form["sub_heading"]
+            slug = request.form["slug"]
+            content = request.form["content"]
+            img_file = request.form.get("img_file", "").strip()
+            date = datetime.now().strftime("%Y-%m-%d")
+
+            if sno == "0":
+                post = Posts(title=title, sub_heading=sub_heading, slug=slug, content=content, img_file=img_file, date=date)
+                db.session.add(post)
+                db.session.commit()
+            else:
+                post = Posts.query.filter_by(sno=sno).first()
+                if post is None:
+                    return redirect(url_for("dashboard"))
+                post.title = title
+                post.sub_heading = sub_heading
+                post.slug = slug
+                post.content = content
+                post.img_file = img_file
+                post.date = date
+                db.session.commit()
+
+            return redirect(url_for("dashboard"))
+        else:
+            post = Posts.query.filter_by(sno=sno).first()
+            return render_template("edit.html", params=site_config, post=post)
+    else:
+        return redirect(url_for("login"))
+
+@app.route('/delete/<string:sno>')
+def delete(sno):
+    if "user" in session and session["user"] == params["admin_user"]:
+        post = Posts.query.filter_by(sno=sno).first()
+
+        if post is None:
+            return redirect(url_for("dashboard"))
+
+        db.session.delete(post)
+        db.session.commit()
+
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login"))
+
+with app.app_context():
+    db.create_all()
+
+    if Posts.query.count() == 0:
+        today_str = datetime.now().strftime("%Y-%m-%d")  # 10 chars, fits String(12)
+
+        default_posts = [
+            Posts(
+                title="Getting Started with Flask: A Beginner's Guide",
+                sub_heading="Build your first web app in under an hour",
+                slug="getting-started-with-flask",
+                img_file="ai_machine_learning",
+                date=today_str,
+                content=(
+                    "Flask is a lightweight Python web framework that makes it incredibly "
+                    "easy to get a web application up and running. Unlike heavier frameworks, "
+                    "Flask gives you just the essentials — routing, templating, and request "
+                    "handling — while letting you add extensions as your project grows.\n\n"
+                    "In this post, we'll walk through setting up a basic Flask app, creating "
+                    "your first route, and rendering a simple HTML template. By the end, "
+                    "you'll have a working \"Hello World\" app and a solid foundation to build on."
+                )
+            ),
+            Posts(
+                title="Understanding REST APIs: The Basics You Need to Know",
+                sub_heading="A practical introduction to how modern web services talk to each other",
+                slug="understanding-rest-apis",
+                img_file="renewable_energy",
+                date=today_str,
+                content=(
+                    "REST (Representational State Transfer) has become the standard way web "
+                    "applications communicate over HTTP. Whether you're consuming a third-party "
+                    "API or building your own, understanding REST principles is essential for "
+                    "modern development.\n\n"
+                    "We'll cover the core concepts: resources, HTTP methods (GET, POST, PUT, "
+                    "DELETE), status codes, and statelessness. We'll also look at a few "
+                    "real-world examples to see these ideas in action."
+                )
+            ),
+            Posts(
+                title="SQL vs NoSQL: Choosing the Right Database for Your Project",
+                sub_heading="Weighing structure against flexibility",
+                slug="sql-vs-nosql-databases",
+                img_file="climate_change",
+                date=today_str,
+                content=(
+                    "One of the earliest architectural decisions in any project is picking a "
+                    "database, and the SQL vs NoSQL debate comes up almost every time. "
+                    "Relational databases like MySQL and PostgreSQL offer strong consistency "
+                    "and structured schemas, while NoSQL trades some of that structure for "
+                    "flexibility and horizontal scalability.\n\n"
+                    "This post breaks down the trade-offs of each approach, with guidance on "
+                    "which scenarios favor one over the other — so you can make the right call "
+                    "for your next project."
+                )
+            ),
+        ]
+        db.session.bulk_save_objects(default_posts)
+        db.session.commit()
+
+if __name__ == '__main__':
+    app.run(debug=True)
