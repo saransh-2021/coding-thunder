@@ -2,8 +2,6 @@ from flask import Flask, render_template, request, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from werkzeug.utils import secure_filename
-from sqlalchemy.orm import Mapped, mapped_column
-
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -62,6 +60,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_recycle' : 280}
 db = SQLAlchemy(app)
 
 class Contacts(db.Model):
+    """Database model for storing user contact inquiries."""
     sno = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=False, nullable=False)
     phone_num = db.Column(db.String(20), nullable=False)
@@ -69,10 +68,8 @@ class Contacts(db.Model):
     date = db.Column(db.String(12), nullable=True)
     email = db.Column(db.String(120), nullable=False)
 
-    # def __init__(self, *, name: str, phone_num: str, msg: str, email: str, date: str | None = None) -> None:
-    #     super().__init__(name=name, phone_num=phone_num, msg=msg, email=email, date=date)
-
 class Posts(db.Model):
+    """Database model for storing blog posts."""
     sno = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(80), unique=False, nullable=False)
     slug = db.Column(db.String(50), nullable=False)
@@ -81,30 +78,44 @@ class Posts(db.Model):
     date = db.Column(db.String(12), nullable=True)
     img_file = db.Column(db.String(500), nullable=True)
 
-    # def __init__(self, *, title: str, slug: str, content: str, sub_heading: str,
-    #              img_file: str | None = None, date: str | None = None) -> None:
-    #     super().__init__(title=title, slug=slug, content=content, sub_heading=sub_heading,
-    #                       img_file=img_file, date=date)
 
 @app.route('/')
 def home():
+    """
+    Renders the public home page with paginated blog posts.
+
+    Query Params:
+        page (int, optional): The page number for pagination. Defaults to 1.
+    """
     page = request.args.get('page', 1, type=int)
 
     # Fetch posts for the current page using SQLAlchemy's .paginate() method
-    posts = Posts.query.order_by(Posts.sno.desc()).paginate(page = page, per_page=params["no_of_posts"], error_out=False)
+    posts = Posts.query.order_by(Posts.sno.desc()).paginate(page=page, per_page=params["no_of_posts"], error_out=False)
     return render_template('index.html', params=site_config, posts=posts)
+
 
 @app.route('/about')
 def about():
+    """Renders the public About Us page with site information."""
     return render_template('about.html', params=site_config)
+
 
 @app.route("/hello")
 def hello():
+    """Health check / test endpoint to verify server connectivity."""
     return "hello, you have successfully test connected with the coding thunders website"
 
-@app.route('/contact', methods=['GET','POST'])
+
+@app.route('/contact', methods=['GET', 'POST'])
 def contact():
-    if request.method=='POST':
+    """
+    Handles the contact form.
+
+    GET: Renders the contact form page.
+    POST: Processes submitted contact inquiry, saves it to the database,
+          and sends an email notification.
+    """
+    if request.method == 'POST':
         name = request.form['name']
         email = request.form['email']
         phone = request.form['phone']
@@ -114,30 +125,50 @@ def contact():
         db.session.add(entry)
         db.session.commit()
         try:
-            mail.send_message(subject=f"New Message from {name}",
-                              recipients=[email],
-                              body=f"Message: {message}\n\nPhone: {phone}"
-                              )
+            mail.send_message(
+                subject=f"New Message from {name}",
+                recipients=[email],
+                body=f"Message: {message}\n\nPhone: {phone}"
+            )
         except Exception as e:
             app.logger.warning(f"Mail sending failed: {e}")
 
     return render_template('contact.html', params=site_config)
 
+
 @app.route('/post/<string:post_slug>', methods=["GET"])
 def post_route(post_slug):
+    """
+    Renders a single blog post identified by its unique URL slug.
+
+    Args:
+        post_slug (str): The slug identifier for the post.
+    """
     post = Posts.query.filter_by(slug=post_slug).first()
     return render_template('post.html', params=site_config, post=post)
 
+
 @app.route('/dashboard')
 def dashboard():
+    """
+    Renders the admin dashboard with a list of all posts.
+    Requires active admin session; otherwise redirects to login.
+    """
     if "user" in session and session["user"] == params["admin_user"]:
         posts = Posts.query.order_by(Posts.sno.desc()).all()
         return render_template('dashboard.html', params=site_config, posts=posts)
     else:
         return redirect(url_for('login'))
 
+
 @app.route('/login', methods=["GET", "POST"])
 def login():
+    """
+    Admin authentication endpoint.
+
+    GET: Renders the login page.
+    POST: Authenticates admin credentials and initializes session.
+    """
     if request.method == "POST":
         username = request.form["uname"]
         userpass = request.form["pass"]
@@ -149,17 +180,24 @@ def login():
     else:
         return render_template('login.html', params=site_config)
 
+
 @app.route('/logout')
 def logout():
+    """Logs out the admin by clearing session and redirects to home page."""
     session.pop('user', None)
     return redirect(url_for('home'))
 
+
 @app.route('/uploader', methods=["GET", "POST"])
 def uploader():
+    """
+    File upload endpoint for authenticated admin.
+    Saves temporary file and removes it once processed.
+    """
     if "user" in session and session["user"] == params["admin_user"]:
-        if request.method=="POST":
-            f = request.files['file1']
-            if not f.filename:
+        if request.method == "POST":
+            f = request.files.get('file1')
+            if not f or not f.filename:
                 return "No file selected"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(f.filename))
             f.save(file_path)
@@ -168,8 +206,19 @@ def uploader():
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
 
-@app.route('/edit/<string:sno>', methods=["GET","POST"])
+
+@app.route('/edit/<string:sno>', methods=["GET", "POST"])
 def edit_route(sno):
+    """
+    Admin endpoint to create or edit a blog post.
+    Requires active admin session.
+
+    Args:
+        sno (str): Serial number of the post ("0" creates a new post).
+
+    GET: Renders the post creation/edit form.
+    POST: Handles form submission and saves/updates post in database.
+    """
     if "user" in session and session["user"] == params["admin_user"]:
         if request.method == "POST":
             title = request.form["title"]
@@ -202,8 +251,16 @@ def edit_route(sno):
     else:
         return redirect(url_for("login"))
 
+
 @app.route('/delete/<string:sno>')
 def delete(sno):
+    """
+    Admin endpoint to delete a blog post by serial number.
+    Requires active admin session.
+
+    Args:
+        sno (str): Serial number of the post to delete.
+    """
     if "user" in session and session["user"] == params["admin_user"]:
         post = Posts.query.filter_by(sno=sno).first()
 
@@ -318,7 +375,6 @@ with app.app_context():
         ]
         db.session.bulk_save_objects(default_posts)
         db.session.commit()
-
 
 if __name__ == '__main__':
     app.run(debug=True)
