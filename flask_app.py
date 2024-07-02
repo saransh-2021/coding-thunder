@@ -5,6 +5,8 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from sqlalchemy.engine.url import make_url
+import sqlalchemy
 
 # Get the directory of the current script
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -273,13 +275,34 @@ def delete(sno):
         return redirect(url_for("dashboard"))
     return redirect(url_for("login"))
 
+def ensure_database_exists():
+    """
+    Ensures that the MySQL database itself exists on the server before connecting.
+    If the database is missing, it connects to the MySQL server instance
+    and executes 'CREATE DATABASE IF NOT EXISTS <dbname>'.
+    """
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    try:
+        url = make_url(db_uri)
+        if url.database and "mysql" in url.drivername:
+            server_url = url.set(database="")
+            engine = sqlalchemy.create_engine(server_url)
+            with engine.connect() as conn:
+                conn.execute(sqlalchemy.text(f"CREATE DATABASE IF NOT EXISTS `{url.database}` CHARACTER SET utf8mb4"))
+                conn.commit()
+            engine.dispose()
+    except Exception as e:
+        app.logger.warning(f"Database auto-creation check skipped or failed: {e}")
+
+
 with app.app_context():
-    # Emergency bootstrap: creates all database tables if they don't exist.
-    # Handles: no tables in the database, or missing tables after a schema change.
+    # 1. Emergency bootstrap: automatically creates the database itself if missing on MySQL.
+    ensure_database_exists()
+
+    # 2. Creates all database tables (Contacts, Posts) if they don't exist.
     db.create_all()
 
-    # Seed default sample posts if the posts table is empty.
-    # Handles: fresh database with no data, or all posts were deleted.
+    # 3. Seeds default sample posts if the posts table is empty.
     if Posts.query.count() == 0:
         today_str = datetime.now().strftime("%Y-%m-%d")
 
