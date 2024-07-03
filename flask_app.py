@@ -66,17 +66,17 @@ class Contacts(db.Model):
     sno = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=False, nullable=False)
     phone_num = db.Column(db.String(20), nullable=False)
-    msg = db.Column(db.String(500), nullable=False)
+    msg = db.Column(db.Text, nullable=False)
     date = db.Column(db.String(12), nullable=True)
     email = db.Column(db.String(120), nullable=False)
 
 class Posts(db.Model):
     """Database model for storing blog posts."""
     sno = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(80), unique=False, nullable=False)
-    slug = db.Column(db.String(50), nullable=False)
-    content = db.Column(db.String(500), nullable=False)
-    sub_heading = db.Column(db.String(120), nullable=False)
+    title = db.Column(db.String(150), unique=False, nullable=False)
+    slug = db.Column(db.String(100), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    sub_heading = db.Column(db.String(255), nullable=False)
     date = db.Column(db.String(12), nullable=True)
     img_file = db.Column(db.String(500), nullable=True)
 
